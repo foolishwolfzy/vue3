@@ -1,8 +1,7 @@
-// import { shared } from '@vue/shared';
-const Reactivity = {
-
-}
-
+// debugger
 export{
-	Reactivity
-}
+	reactive,
+	shallowReactive,
+	shallowReadonly,
+	readonly
+} from './reactive'
