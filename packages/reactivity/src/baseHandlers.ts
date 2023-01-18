@@ -1,5 +1,7 @@
 import { extend, isObject } from '@vue/shared/src'
 import { readonly, reactive } from './reactive'
+import { track } from './effect'
+import { TrackOpTyps } from './operators'
 
 function createGetter(isReadonly = false, shallow = false) {// 拦截获取功能
 	return function get(target, key, receiver){
@@ -9,6 +11,8 @@ function createGetter(isReadonly = false, shallow = false) {// 拦截获取功�
 
 		if(!isReadonly){
 			// 依赖收集，数据变化时更新视图
+			console.log('执行effect时会取值','收集effect')
+			track(target, TrackOpTyps.GET, key)
 		}
 
 		if(shallow){
@@ -24,6 +28,8 @@ function createGetter(isReadonly = false, shallow = false) {// 拦截获取功�
 function createSetter(shallow = false) { // 拦截设置功能
 	return function get(target, key, value, receiver){
 		const res = Reflect.set(target, key, value, receiver)
+		// 数据更新时 通知对应属性的effect执行
+
 		return res
 	}
 }
