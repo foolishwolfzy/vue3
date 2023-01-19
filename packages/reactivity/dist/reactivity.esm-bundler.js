@@ -1,5 +1,12 @@
 const isObject = (value) => typeof value == 'object' && value !== null;
 const extend = Object.assign;
+const isArray = Array.isArray;
+const isIntegerKey = (key) => parseInt(key) + '' === key;
+let hasOwnpRroperty = Object.prototype.hasOwnProperty;
+const hasOwn = (target, key) => hasOwnpRroperty.call(target, key);
+const hasChanged = (oldValue, value) => oldValue != value;
+// export const
+// export const
 
 function effect(fn, options = {}) {
     const effect = createReactiveEffect(fn, options);
@@ -54,6 +61,43 @@ function track(target, type, key) {
     console.log(targetMap, key, target);
     // console.log(target,key,activeEffect)
 }
+// 属性对应的effect（数组，对象）
+function trigger(target, type, key, newValue, oldValue) {
+    const depsMap = targetMap.get(target);
+    if (!depsMap)
+        return;
+    const effects = new Set(); //对effect去重
+    // 将所有要执行的effect存到一个新的set中最后一起执行
+    const add = (effectsToAdd) => {
+        if (effectsToAdd) {
+            effectsToAdd.forEach(effect => effects.add(effect));
+        }
+    };
+    // 1.修改的是数组长度
+    if (key === 'length' && isArray(target)) {
+        // 如果对应的长度，有新加入需要收集依赖
+        depsMap.forEach((dep, key) => {
+            if (key === 'length' || key > newValue) { // 如果更改的长度小于收集的索引那这个索引也要触发effect跟新执行
+                add(dep);
+            }
+        });
+    }
+    else {
+        //对象
+        if (key !== undefined) { //这里肯定是修改
+            add(depsMap.get(key));
+        }
+        // 修改了数组中的某个索引
+        switch (type) {
+            case 0 /* TriggerOrTyps.ADD */: //添加一个索引就触发长度更新
+                if (isArray(target) && isIntegerKey(key)) {
+                    add(depsMap.get('length'));
+                }
+                break;
+        }
+    }
+    effects.forEach((effect) => effect());
+}
 
 function createGetter(isReadonly = false, shallow = false) {
     return function get(target, key, receiver) {
@@ -75,8 +119,18 @@ function createGetter(isReadonly = false, shallow = false) {
 }
 function createSetter(shallow = false) {
     return function get(target, key, value, receiver) {
+        const oldValue = target[key];
+        let hadkey = isArray(target) && isIntegerKey(key) ? Number(key) < target.length : hasOwn(target, key);
         const res = Reflect.set(target, key, value, receiver);
         // 数据更新时 通知对应属性的effect执行
+        if (!hadkey) {
+            //增加
+            trigger(target, 0 /* TriggerOrTyps.ADD */, key, value);
+        }
+        else if (hasChanged(oldValue, value)) {
+            //修改
+            trigger(target, 1 /* TriggerOrTyps.SET */, key, value);
+        }
         return res;
     };
 }

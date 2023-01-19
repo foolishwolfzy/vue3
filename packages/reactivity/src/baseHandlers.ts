@@ -1,7 +1,7 @@
-import { extend, isObject } from '@vue/shared/src'
+import { extend, hasChanged, hasOwn, isArray, isIntegerKey, isObject } from '@vue/shared/src'
 import { readonly, reactive } from './reactive'
-import { track } from './effect'
-import { TrackOpTyps } from './operators'
+import { track, trigger } from './effect'
+import { TrackOpTyps, TriggerOrTyps } from './operators'
 
 function createGetter(isReadonly = false, shallow = false) {// 拦截获取功能
 	return function get(target, key, receiver){
@@ -27,8 +27,17 @@ function createGetter(isReadonly = false, shallow = false) {// 拦截获取功�
 
 function createSetter(shallow = false) { // 拦截设置功能
 	return function get(target, key, value, receiver){
+		const oldValue = target[key];
+		let hadkey = isArray(target) && isIntegerKey(key) ? Number(key) < target.length : hasOwn(target, key)
 		const res = Reflect.set(target, key, value, receiver)
 		// 数据更新时 通知对应属性的effect执行
+		if(!hadkey){
+			//增加
+			trigger(target, TriggerOrTyps.ADD, key, value)
+		}else if(hasChanged(oldValue, value)){
+			//修改
+			trigger(target, TriggerOrTyps.SET, key, value, oldValue)
+		}
 
 		return res
 	}
