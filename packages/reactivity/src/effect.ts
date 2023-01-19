@@ -1,6 +1,8 @@
 import { isArray, isIntegerKey } from "@vue/shared"
 import { TriggerOrTyps } from "./operators"
 
+// 通过track去收集所有依赖
+// trigger 去触发effect
 export function effect(fn,options:any = {}) {
 	const effect = createReactiveEffect(fn,options)
 
@@ -10,6 +12,7 @@ export function effect(fn,options:any = {}) {
 
 	return effect
 }
+
 let uid = 0
 let activeEffect //用于存储当前effect
 const effectStack = []

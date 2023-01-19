@@ -10,6 +10,8 @@ const hasChanged = (oldValue, value) => oldValue != value;
 // export const
 // export const
 
+// 通过track去收集所有依赖
+// trigger 去触发effect
 function effect(fn, options = {}) {
     const effect = createReactiveEffect(fn, options);
     if (!options.lazy) {
