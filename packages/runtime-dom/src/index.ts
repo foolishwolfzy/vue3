@@ -20,5 +20,6 @@ export function createApp(rootComponent, rootProps = null){
 	return app
 }
 
+export * from '@vue/runtime-core'
 // runtime-dom -> runtime-core
 // runtime-dom 解决浏览器平台差异
