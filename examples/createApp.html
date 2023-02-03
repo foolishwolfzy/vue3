@@ -10,14 +10,21 @@
 	<script src="../node_modules/@vue/runtime-dom/dist/runtime-dom.global.js"></script>
 		<div id="app"></div>
 	<script>
-		let { createApp, h } = VueRuntimeDOM
+		let { createApp, h, reactive } = VueRuntimeDOM
 		let App = {
 			setup(props, context){
 				console.log('ok', props, context)
 				//return render,一般这么写，不写下面render这种方式，且这个会覆盖下面这个
+				let state = reactive({name:'kk'})
+				let fn = function(){
+					state.name = 'lk'
+					state.name = 'lm'
+					state.name = 'ld'
+				}
 				return (proxy) => {
 					console.log('setup render')
-					return h('div',null, h('i'), h('i'))
+					return h('div',{onClick:fn},state.name)
+					// return h('span',state.name)
 				}
 				// h('div',{a:1})
 				// h('div',{},'hello ')
@@ -27,9 +34,9 @@
 				// h('div',{}, [h('i'), h('i')])
 				// h('div','a','b','c')
 			},
-			render(proxy){
-				console.log('component render',proxy)
-			}
+			// render(proxy){
+			// 	console.log('component render',proxy)
+			// }
 		}
 		let app = createApp(App,{name:'zy',age:18})
 		app.mount('#app')

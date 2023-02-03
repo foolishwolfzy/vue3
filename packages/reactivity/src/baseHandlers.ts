@@ -22,6 +22,8 @@ function createGetter(isReadonly = false, shallow = false) {// 拦截获取功�
 		if(isObject(res)){ //vue2 是一上来就递归，vue3是取值时才进行
 			return isReadonly ? readonly(res) : reactive(res)
 		}
+
+		return res
 	}
 }
 

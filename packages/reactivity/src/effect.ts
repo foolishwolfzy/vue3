@@ -5,8 +5,8 @@ import { TriggerOrTyps } from "./operators"
 // trigger 去触发effect
 export function effect(fn,options:any = {}) {
 	const effect = createReactiveEffect(fn,options)
-
 	if(!options.lazy){
+		console.log('默认执行')
 		effect()// effect默认会先执行一次
 	}
 
@@ -18,7 +18,7 @@ let activeEffect //用于存储当前effect
 const effectStack = []
 function createReactiveEffect(fn,options){
 	const effect = function reactiveEffect() {
-		console.log('todo...')
+		// console.log('todo...')
 		if(!effectStack.includes(effect)){
 			try {
 				effectStack.push(effect)
@@ -54,6 +54,7 @@ export function track(target, type, key){
 	}
 	if(!dep.has(activeEffect)){
 		dep.add(activeEffect)
+		// activeEffect.deps.push(dep)// 双向记录方便取值
 	}
 	// 这个dep的key就是object的属性如state.name中的name，value就是effect(fn) 中的fn，即是副作用activeEffect
 	console.log(targetMap, key, target)
@@ -70,6 +71,7 @@ export function trigger(target, type, key?, newValue?, oldValue?) {
 	const add = (effectsToAdd) => {
 		if(effectsToAdd){
 			effectsToAdd.forEach(effect => effects.add(effect));
+			// effectsToAdd.forEach(effect => effects());
 		}
 	}
 
@@ -97,6 +99,7 @@ export function trigger(target, type, key?, newValue?, oldValue?) {
 	}
 	effects.forEach((effect:any) => {
 		if(effect.options.scheduler){
+			// console.log('scheduler-----')
 			effect.options.scheduler(effect)
 		}else{
 			effect()

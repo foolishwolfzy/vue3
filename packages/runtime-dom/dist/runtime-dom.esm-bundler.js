@@ -115,6 +115,7 @@ const nodeOps = {
 function effect(fn, options = {}) {
     const effect = createReactiveEffect(fn, options);
     if (!options.lazy) {
+        console.log('默认执行');
         effect(); // effect默认会先执行一次
     }
     return effect;
@@ -124,7 +125,7 @@ let activeEffect; //用于存储当前effect
 const effectStack = [];
 function createReactiveEffect(fn, options) {
     const effect = function reactiveEffect() {
-        console.log('todo...');
+        // console.log('todo...')
         if (!effectStack.includes(effect)) {
             try {
                 effectStack.push(effect);
@@ -160,6 +161,7 @@ function track(target, type, key) {
     }
     if (!dep.has(activeEffect)) {
         dep.add(activeEffect);
+        // activeEffect.deps.push(dep)// 双向记录方便取值
     }
     // 这个dep的key就是object的属性如state.name中的name，value就是effect(fn) 中的fn，即是副作用activeEffect
     console.log(targetMap, key, target);
@@ -175,6 +177,7 @@ function trigger(target, type, key, newValue, oldValue) {
     const add = (effectsToAdd) => {
         if (effectsToAdd) {
             effectsToAdd.forEach(effect => effects.add(effect));
+            // effectsToAdd.forEach(effect => effects());
         }
     };
     // 1.修改的是数组长度
@@ -202,6 +205,7 @@ function trigger(target, type, key, newValue, oldValue) {
     }
     effects.forEach((effect) => {
         if (effect.options.scheduler) {
+            // console.log('scheduler-----')
             effect.options.scheduler(effect);
         }
         else {
@@ -226,6 +230,7 @@ function createGetter(isReadonly = false, shallow = false) {
         if (isObject(res)) { //vue2 是一上来就递归，vue3是取值时才进行
             return isReadonly ? readonly(res) : reactive(res);
         }
+        return res;
     };
 }
 function createSetter(shallow = false) {
@@ -246,19 +251,25 @@ function createSetter(shallow = false) {
     };
 }
 const get = createGetter();
+const shallowGet = createGetter(false, true);
 const readonlyGet = createGetter(true);
 const shallowReadonlyGet = createGetter(true, true);
 const set = createSetter();
+const shallowSet = createSetter(true);
 const mutableHandlers = {
     get,
     set
+};
+const shallowReactiveHandlers = {
+    get: shallowGet,
+    set: shallowSet
 };
 let readonlyObj = {
     set: (target, key) => {
         console.warn(`set on '${target}' key '${key}' falied`);
     }
 };
-extend({
+const shallowReadonlyHandlers = extend({
     get: shallowReadonlyGet,
 }, readonlyObj);
 const readonlyHandlers = extend({
@@ -267,6 +278,12 @@ const readonlyHandlers = extend({
 
 function reactive(target) {
     return createReactiveObject(target, false, mutableHandlers);
+}
+function shallowReactive(target) {
+    return createReactiveObject(target, false, shallowReactiveHandlers);
+}
+function shallowReadonly(target) {
+    return createReactiveObject(target, true, shallowReadonlyHandlers);
 }
 function readonly(target) {
     return createReactiveObject(target, true, readonlyHandlers);
@@ -286,6 +303,55 @@ function createReactiveObject(target, isReadonly, baseHandlers) {
     const proxy = new Proxy(target, baseHandlers);
     proxyMap.set(target, proxy);
     return proxy;
+}
+
+class ComputedRefImpl {
+    getter;
+    setter;
+    _dirty = true;
+    _value;
+    effect;
+    constructor(getter, setter) {
+        this.getter = getter;
+        this.setter = setter;
+        // 计算属性会默认产生一个effect
+        this.effect = effect(getter, {
+            lazy: true,
+            scheduler: () => {
+                if (!this._dirty) {
+                    this._dirty = true;
+                    trigger(this, 1 /* TriggerOrTyps.SET */, 'value');
+                }
+            }
+        });
+    }
+    get value() {
+        if (this._dirty) {
+            this._value = this.effect(); // 返回用户返回值
+            this._dirty = false;
+        }
+        // 计算属性页要依赖收集
+        track(this, 0 /* TrackOpTyps.GET */, 'value');
+        return this._value;
+    }
+    set value(newValue) {
+        this.setter(newValue);
+    }
+}
+function computed(getterOrOptions) {
+    let getter;
+    let setter;
+    if (isFunction(getterOrOptions)) {
+        getter = getterOrOptions;
+        setter = () => {
+            console.warn('computed value must be readonly');
+        };
+    }
+    else {
+        getter = getterOrOptions.get;
+        setter = getterOrOptions.set;
+    }
+    return new ComputedRefImpl(getter, setter);
 }
 
 function isVnode(vnode) {
@@ -319,6 +385,12 @@ function normalizeChildren(vnode, children) {
         type = 8 /* ShapeFlags.TEXT_CHILDREN */;
     }
     vnode.shapeFlag |= type;
+}
+const Text = Symbol("Text");
+function normalizeVNode(child) {
+    if (isObject(child))
+        return child;
+    return createVNode(Text, null, String(child));
 }
 
 function createAppAPI(render) {
@@ -446,46 +518,131 @@ function createSetupContext(instance) {
 // context 4个参数方便开发时使用
 // proxy 代理方面取值vue2中也有
 
-const setupRenderEffect = (instance, container) => {
-    // 创建一个effect 在effect中调用render 这样render方法中拿到的数据会收集这个effect，属性更新触发effect
-    // instance.render()
-    effect(function componentEffect() {
-        if (!instance.isMounted) {
-            // 首次渲染
-            let proxyToUse = instance.proxy;
-            // vue2 $vnode _vnode
-            // vue3 vnode subTree
-            let subTree = instance.render.call(proxyToUse, proxyToUse);
-            patch(null, subTree, container);
-            instance.isMounted = true;
-        }
-    });
-};
-const mountComponent = (initialVNode, container) => {
-    // 调用setup得到返回值，获取render函数返回的结果来进行渲染
-    // 1. 创建实例
-    const instance = (initialVNode.component = createComponentInstance(initialVNode));
-    // 2. 需要的数据解析到实例上
-    setupComponent(instance);
-    // 3. 创建effect 让render函数执行
-    setupRenderEffect(instance, container);
-};
-const processComponent = (n1, n2, container) => {
-    if (n1 == null) { //没有上一次（老）的vnode
-        mountComponent(n2, container);
+let queue = [];
+function queueJob(job) {
+    if (!queue.includes(job)) {
+        queue.push(job);
+        queueFlush();
     }
-};
-const patch = (n1, n2, container) => {
-    const { shapeFlag } = n2;
-    if (shapeFlag & 1 /* ShapeFlags.ELEMENT */) {
-        console.log('yuanshu', n1, n2, container);
+}
+let isFlushPending = false;
+function queueFlush() {
+    if (!isFlushPending) {
+        isFlushPending = true;
+        Promise.resolve().then(flushJobs);
     }
-    else if (shapeFlag & 4 /* ShapeFlags.STATEFUL_COMPONENT */) {
-        processComponent(n1, n2, container);
+}
+function flushJobs() {
+    isFlushPending = false;
+    // 清空时 需要根据调用的顺序依次刷新 先父再子
+    queue.sort((a, b) => a.id - b.id);
+    for (let i = 0; i < queue.length; i++) {
+        const job = queue[i];
+        job();
     }
-};
+    queue.length = 0;
+}
+
 // 创建一个渲染器
 function createRenderer(rendererOptions) {
+    const { insert: hostInsert, remove: hostRemove, patchProp: hostPatchProp, createElement: hostCreateElement, createText: hostCreateText, createComment: hostCreateComment, setText: hostSetText, setElementText: hostSetElementText, } = rendererOptions;
+    //-------------------- 组件 ---------------------
+    const setupRenderEffect = (instance, container) => {
+        // 创建一个effect 在effect中调用render 这样render方法中拿到的数据会收集这个effect，属性更新触发effect
+        // instance.render()
+        effect(function componentEffect() {
+            if (!instance.isMounted) {
+                // 首次渲染
+                let proxyToUse = instance.proxy;
+                // vue2 $vnode _vnode
+                // vue3 vnode subTree
+                let subTree = instance.render.call(proxyToUse, proxyToUse);
+                patch(null, subTree, container);
+                instance.isMounted = true;
+            }
+            else {
+                // update diff 序列优化 watchApi 生命周期
+                console.log('更新了');
+            }
+        }, {
+            scheduler: queueJob
+        });
+    };
+    const mountComponent = (initialVNode, container) => {
+        // 调用setup得到返回值，获取render函数返回的结果来进行渲染
+        // 1. 创建实例
+        const instance = (initialVNode.component = createComponentInstance(initialVNode));
+        // 2. 需要的数据解析到实例上
+        setupComponent(instance);
+        // 3. 创建effect 让render函数执行
+        setupRenderEffect(instance, container);
+    };
+    const processComponent = (n1, n2, container) => {
+        if (n1 == null) { //没有上一次（老）的vnode
+            mountComponent(n2, container);
+        }
+    };
+    //-------------------- 组件 ---------------------
+    //-------------------- 元素 ---------------------
+    const mountChildren = (children, container) => {
+        for (let i = 0; i < children.length; i++) {
+            let child = normalizeVNode(children[i]);
+            patch(null, child, container);
+        }
+    };
+    const mountElement = (vnode, container) => {
+        // 递归渲染
+        const { props, shapeFlag, type, children } = vnode;
+        let el = (vnode.el = hostCreateElement(type));
+        if (props) {
+            for (const key in props) {
+                //porps渲染
+                console.log(props[key], key);
+                hostPatchProp(el, key, null, props[key]);
+            }
+        }
+        if (shapeFlag & 8 /* ShapeFlags.TEXT_CHILDREN */) {
+            hostSetElementText(el, children);
+        }
+        else if (shapeFlag & 16 /* ShapeFlags.ARRAY_CHILDREN */) {
+            mountChildren(children, el);
+        }
+        //插入
+        hostInsert(el, container);
+    };
+    const processElement = (n1, n2, container) => {
+        if (n1 == null) {
+            mountElement(n2, container);
+        }
+        else {
+            // 更新
+            console.log('跟新---');
+        }
+    };
+    //-------------------- 元素 ---------------------
+    const processText = (n1, n2, container) => {
+        console.log('processText--===');
+        if (n1 == null) {
+            hostInsert((n2.el = hostCreateText(n2.children)), container);
+        }
+    };
+    const patch = (n1, n2, container) => {
+        const { shapeFlag, type } = n2;
+        switch (type) {
+            case Text:
+                processText(n1, n2, container);
+                break;
+            default:
+                if (shapeFlag & 1 /* ShapeFlags.ELEMENT */) {
+                    console.log('yuanshu', n1, n2, container);
+                    processElement(n1, n2, container);
+                }
+                else if (shapeFlag & 4 /* ShapeFlags.STATEFUL_COMPONENT */) {
+                    processComponent(n1, n2, container);
+                }
+                break;
+        }
+    };
     const render = (vnode, container) => {
         patch(null, vnode, container);
     };
@@ -520,10 +677,10 @@ function h(type, propsOrChildren, children) {
 
 // 属性操作增删改（样式，类，事件，其他属性）
 // 渲染时用到的所有方法
-extend({ patchProp }, nodeOps);
+const rendererOptions = extend({ patchProp }, nodeOps);
 // runtime-core 提供渲染的核心方法，用runtime-dom中的api进行渲染
 function createApp(rootComponent, rootProps = null) {
-    const app = createRenderer().createApp(rootComponent, rootProps);
+    const app = createRenderer(rendererOptions).createApp(rootComponent, rootProps);
     let { mount } = app;
     app.mount = function (container) {
         container = nodeOps.querySelector(container);
@@ -536,5 +693,5 @@ function createApp(rootComponent, rootProps = null) {
 // runtime-dom -> runtime-core
 // runtime-dom 解决浏览器平台差异
 
-export { createApp, createRenderer, h };
+export { computed, createApp, createRenderer, effect, h, reactive, readonly, shallowReactive, shallowReadonly };
 //# sourceMappingURL=runtime-dom.esm-bundler.js.map

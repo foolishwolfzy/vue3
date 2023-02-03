@@ -37,3 +37,11 @@ function normalizeChildren(vnode, children){
 
 	vnode.shapeFlag |= type
 }
+
+export const Text = Symbol("Text")
+
+export function normalizeVNode(child){
+	if(isObject(child)) return child
+
+	return createVNode(Text,null,String(child))
+}

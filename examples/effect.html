@@ -26,6 +26,7 @@
 		// state = {}
 		console.log('render--=')
 		effect(()=>{
+			console.log('first--effect')
 			app.innerHTML = 'deng' + state.name + ',' + state.age.k
 		})
 

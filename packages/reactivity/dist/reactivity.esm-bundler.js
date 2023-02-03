@@ -1,6 +1,7 @@
 const isObject = (value) => typeof value == 'object' && value !== null;
 const extend = Object.assign;
 const isArray = Array.isArray;
+const isFunction = (value) => typeof value == 'function';
 const isIntegerKey = (key) => parseInt(key) + '' === key;
 let hasOwnpRroperty = Object.prototype.hasOwnProperty;
 const hasOwn = (target, key) => hasOwnpRroperty.call(target, key);
@@ -13,6 +14,7 @@ const hasChanged = (oldValue, value) => oldValue != value;
 function effect(fn, options = {}) {
     const effect = createReactiveEffect(fn, options);
     if (!options.lazy) {
+        console.log('默认执行');
         effect(); // effect默认会先执行一次
     }
     return effect;
@@ -58,6 +60,7 @@ function track(target, type, key) {
     }
     if (!dep.has(activeEffect)) {
         dep.add(activeEffect);
+        // activeEffect.deps.push(dep)// 双向记录方便取值
     }
     // 这个dep的key就是object的属性如state.name中的name，value就是effect(fn) 中的fn，即是副作用activeEffect
     console.log(targetMap, key, target);
@@ -73,6 +76,7 @@ function trigger(target, type, key, newValue, oldValue) {
     const add = (effectsToAdd) => {
         if (effectsToAdd) {
             effectsToAdd.forEach(effect => effects.add(effect));
+            // effectsToAdd.forEach(effect => effects());
         }
     };
     // 1.修改的是数组长度
@@ -98,7 +102,14 @@ function trigger(target, type, key, newValue, oldValue) {
                 break;
         }
     }
-    effects.forEach((effect) => effect());
+    effects.forEach((effect) => {
+        if (effect.options.scheduler) {
+            effect.options.scheduler(effect);
+        }
+        else {
+            effect();
+        }
+    });
 }
 
 function createGetter(isReadonly = false, shallow = false) {
@@ -117,6 +128,7 @@ function createGetter(isReadonly = false, shallow = false) {
         if (isObject(res)) { //vue2 是一上来就递归，vue3是取值时才进行
             return isReadonly ? readonly(res) : reactive(res);
         }
+        return res;
     };
 }
 function createSetter(shallow = false) {
@@ -191,5 +203,54 @@ function createReactiveObject(target, isReadonly, baseHandlers) {
     return proxy;
 }
 
-export { effect, reactive, readonly, shallowReactive, shallowReadonly };
+class ComputedRefImpl {
+    getter;
+    setter;
+    _dirty = true;
+    _value;
+    effect;
+    constructor(getter, setter) {
+        this.getter = getter;
+        this.setter = setter;
+        // 计算属性会默认产生一个effect
+        this.effect = effect(getter, {
+            lazy: true,
+            scheduler: () => {
+                if (!this._dirty) {
+                    this._dirty = true;
+                    trigger(this, 1 /* TriggerOrTyps.SET */, 'value');
+                }
+            }
+        });
+    }
+    get value() {
+        if (this._dirty) {
+            this._value = this.effect(); // 返回用户返回值
+            this._dirty = false;
+        }
+        // 计算属性页要依赖收集
+        track(this, 0 /* TrackOpTyps.GET */, 'value');
+        return this._value;
+    }
+    set value(newValue) {
+        this.setter(newValue);
+    }
+}
+function computed(getterOrOptions) {
+    let getter;
+    let setter;
+    if (isFunction(getterOrOptions)) {
+        getter = getterOrOptions;
+        setter = () => {
+            console.warn('computed value must be readonly');
+        };
+    }
+    else {
+        getter = getterOrOptions.get;
+        setter = getterOrOptions.set;
+    }
+    return new ComputedRefImpl(getter, setter);
+}
+
+export { computed, effect, reactive, readonly, shallowReactive, shallowReadonly };
 //# sourceMappingURL=reactivity.esm-bundler.js.map
