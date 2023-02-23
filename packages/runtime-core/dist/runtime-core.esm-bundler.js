@@ -1,85 +1,3 @@
-const patchEvent = (el, key, value) => {
-    const invokers = el._vei || (el._vei = {});
-    const exists = invokers[key];
-    if (value && exists) { //需要绑定事件 且存在的情况
-        exists.value = value;
-    }
-    else {
-        const eventName = key.slice(2).toLowerCase();
-        if (value) {
-            // 要绑定事件，以前没有绑定过
-            let invoker = invokers[key] = createInvoker(value);
-            el.addEventListener(eventName, invoker);
-        }
-        else {
-            el.removeEventListener(eventName, exists);
-            invokers[eventName] = undefined;
-        }
-    }
-    function createInvoker(value) {
-        const invoker = (e) => { invoker.value(e); };
-        invoker.value = value;
-        return invoker;
-    }
-};
-
-const patchClass = (el, value) => {
-    if (value == null) {
-        value = '';
-    }
-    el.className = value;
-};
-
-const patchStyle = (el, prev, next) => {
-    const style = el.style; //得到样式
-    if (next == null) {
-        el.removeAttribute('style');
-    }
-    else {
-        //老的里，先做删除，
-        // 新的里，再赋值
-        if (prev) {
-            for (let key in prev) {
-                if (next[key] == null) { //老的里有，新的里没有，要删除
-                    style[key] = '';
-                }
-            }
-        }
-        //新的需要给style赋值上去
-        for (let key in next) {
-            style[key] = next[key];
-        }
-    }
-};
-
-const patchAttr = (el, key, value) => {
-    if (value == null) {
-        el.removeAttribute(key);
-    }
-    else {
-        el.setAttribute(key, value);
-    }
-};
-
-const patchProp = (el, key, prevValue, nextValue) => {
-    switch (key) {
-        case 'class':
-            patchClass(el, nextValue);
-            break;
-        case 'style':
-            patchStyle(el, prevValue, nextValue);
-            break;
-        default:
-            if (/^on[^a-z]/.test(key)) {
-                patchEvent(el, key, nextValue);
-            }
-            else {
-                patchAttr(el, key, nextValue);
-            }
-            break;
-    }
-};
-
 const isObject = (value) => typeof value == 'object' && value !== null;
 const extend = Object.assign;
 const isArray = Array.isArray;
@@ -91,25 +9,6 @@ const hasOwn = (target, key) => hasOwnpRroperty.call(target, key);
 const hasChanged = (oldValue, value) => oldValue != value;
 // export const
 // export const
-
-const nodeOps = {
-    // 一些dom操作
-    createElement: tagName => document.createElement(tagName),
-    remove: child => {
-        const parent = child.parentNode;
-        if (parent) {
-            parent.removeChild(child);
-        }
-    },
-    insert: (child, parent, anchor = null) => {
-        parent.insertBefore(child, anchor); //anchor 为空时相当于appendChild
-    },
-    querySelector: selector => document.querySelector(selector),
-    setElementText: (el, text) => el.textContent = text,
-    createText: text => document.createTextNode(text),
-    setText: (node, text) => node.nodeValue = text,
-    nextSibling: (node) => node.nextSibling
-};
 
 // 通过track去收集所有依赖
 // trigger 去触发effect
@@ -914,23 +813,5 @@ function h(type, propsOrChildren, children) {
     }
 }
 
-// 属性操作增删改（样式，类，事件，其他属性）
-// 渲染时用到的所有方法
-const rendererOptions = extend({ patchProp }, nodeOps);
-// runtime-core 提供渲染的核心方法，用runtime-dom中的api进行渲染
-function createApp(rootComponent, rootProps = null) {
-    const app = createRenderer(rendererOptions).createApp(rootComponent, rootProps);
-    let { mount } = app;
-    app.mount = function (container) {
-        container = nodeOps.querySelector(container);
-        container.innerHTML = '';
-        // 将组件渲染成dom元素 进行挂载
-        mount(container); //函数劫持
-    };
-    return app;
-}
-// runtime-dom -> runtime-core
-// runtime-dom 解决浏览器平台差异
-
-export { computed, createApp, createRenderer, effect, h, reactive, readonly, shallowReactive, shallowReadonly };
-//# sourceMappingURL=runtime-dom.esm-bundler.js.map
+export { computed, createRenderer, effect, h, reactive, readonly, shallowReactive, shallowReadonly };
+//# sourceMappingURL=runtime-core.esm-bundler.js.map

@@ -24,7 +24,7 @@ let activeEffect; //用于存储当前effect
 const effectStack = [];
 function createReactiveEffect(fn, options) {
     const effect = function reactiveEffect() {
-        console.log('todo...');
+        // console.log('todo...')
         if (!effectStack.includes(effect)) {
             try {
                 effectStack.push(effect);
@@ -104,6 +104,7 @@ function trigger(target, type, key, newValue, oldValue) {
     }
     effects.forEach((effect) => {
         if (effect.options.scheduler) {
+            // console.log('scheduler-----')
             effect.options.scheduler(effect);
         }
         else {

@@ -15,15 +15,22 @@
 			setup(props, context){
 				console.log('ok', props, context)
 				//return render,一般这么写，不写下面render这种方式，且这个会覆盖下面这个
-				let state = reactive({name:'kk'})
+				let state = reactive({name:'kk',getMoney:false})
 				let fn = function(){
 					state.name = 'lk'
 					state.name = 'lm'
 					state.name = 'ld'
 				}
+				setTimeout(() => {
+					state.getMoney = true
+					state.name = 'oo'
+				}, 800);
 				return (proxy) => {
-					console.log('setup render')
-					return h('div',{onClick:fn},state.name)
+					// console.log('setup render')
+					return state.getMoney ? 
+					h('div',{style:{color:'red'}},state.name):
+					h('div',{style:{color:'blue'}},state.name)
+					// return h('div',{onClick:fn},state.name)
 					// return h('span',state.name)
 				}
 				// h('div',{a:1})

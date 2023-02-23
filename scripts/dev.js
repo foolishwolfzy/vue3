@@ -4,7 +4,8 @@ const fs = require('fs');
 const execa = require('execa');
 
 // const target = 'reactivity'
-const target = 'runtime-dom'
+// const target = 'runtime-dom'
+const target = 'compiler-dom'
 build(target)
 async function build(target){
 	await execa('rollup',
