@@ -8,8 +8,68 @@ var VueCompilerDOM = (function (exports) {
 	    }
 	    return !source;
 	}
-	function parseElement(context) { }
-	function parseInterpolation(context) { }
+	function advanceSpaces(context) {
+	    const match = /^[ \t\r\n]+/.exec(context.source);
+	    if (match) {
+	        advanceBy(context, match[0].length);
+	    }
+	}
+	function parseTag(context) {
+	    const start = getCursor(context); //<div/>
+	    // 最基本的元字符
+	    const match = /^<\/?([a-z][^ \t\r\n/>]*)/.exec(context.source); // igm
+	    const tag = match[1];
+	    advanceBy(context, match[0].length);
+	    advanceSpaces(context);
+	    const isSelfClosing = context.source.startsWith('/>');
+	    advanceBy(context, isSelfClosing ? 2 : 1);
+	    return {
+	        type: 1 /* NodeTypes.ElEMENT */,
+	        tag,
+	        isSelfClosing,
+	        loc: getSelection(context, start)
+	    };
+	}
+	function parseElement(context) {
+	    // 1.解析标签名 
+	    let ele = parseTag(context); // <div></div>
+	    // 这里可能有儿子
+	    const children = parseChildren(context); // 这里处理儿子的时候 有可能没有儿子，那就直接跳出？ 如果遇到结束标签就直接跳出就好了
+	    if (context.source.startsWith('</')) {
+	        parseTag(context); // 解析关闭标签时 同时会移除关闭信息并且更新偏移量
+	    }
+	    ele.children = children;
+	    ele.loc = getSelection(context, ele.loc.start);
+	    return ele;
+	}
+	// 表达式
+	function parseInterpolation(context) {
+	    const start = getCursor(context); // 获取表达式的start位置
+	    const closeIndex = context.source.indexOf('}}', '{{');
+	    advanceBy(context, 2);
+	    const innerStart = getCursor(context);
+	    const innerEnd = getCursor(context); // 这个end稍后我们会改
+	    const rawContentLength = closeIndex - 2; // 拿到{{ 内容 }}  包含空格的
+	    const preTrimContent = parseTextData(context, rawContentLength);
+	    const content = preTrimContent.trim(); // 去掉前后空格  "  name  "  name
+	    const startOffset = preTrimContent.indexOf(content); // {{  name  }}
+	    if (startOffset > 0) { // 有前面空格
+	        advancePositionWithMutation(innerStart, preTrimContent, startOffset);
+	    }
+	    // 在去更新innerEnd ？ 
+	    const endOffset = content.length + startOffset;
+	    advancePositionWithMutation(innerEnd, preTrimContent, endOffset);
+	    advanceBy(context, 2);
+	    return {
+	        type: 5 /* NodeTypes.INTERPOLATION */,
+	        content: {
+	            type: 4 /* NodeTypes.SIMPLE_EXPRESSION */,
+	            isStatic: false,
+	            loc: getSelection(context, innerStart, innerEnd)
+	        },
+	        loc: getSelection(context, start)
+	    };
+	}
 	function getCursor(context) {
 	    let { line, column, offset } = context;
 	    return { line, column, offset };
@@ -74,10 +134,10 @@ var VueCompilerDOM = (function (exports) {
 	        const s = context.source; // 当前上下文中的内容  <  abc  {{}}
 	        let node;
 	        if (s[0] == '<') { // 标签
-	            node = parseElement();
+	            node = parseElement(context);
 	        }
 	        else if (s.startsWith('{{')) { // 表达式  
-	            node = parseInterpolation();
+	            node = parseInterpolation(context);
 	        }
 	        else {
 	            node = parseText(context);
@@ -86,7 +146,7 @@ var VueCompilerDOM = (function (exports) {
 	    }
 	    nodes.forEach((node, index) => {
 	        if (node.type === 2 /* NodeTypes.TEXT */) {
-	            if (!/[^ \t\r\n]/.test(node.content)) { // 只要没有内容，就删除掉
+	            if (!/[^ \t\r\n]/.test(node.content)) { // 只要没有内容，就删除掉（空格？）
 	                nodes[index] = null;
 	            }
 	            else {
